@@ -13,8 +13,9 @@ def word_digits_to_digits(s):
   "eight":"8",
   "nine":"9"
  }
- for n, s in numMap.items():
-     s = s.replace(n,s)
+ last_replace_str = s
+ for n, d in numMap.items():
+     s = s.replace(n,n+d+n)
  return s
 
 def pl(l): n=[c for c in word_digits_to_digits(l) if c.isdigit()];return int(n[0]+n[-1])
@@ -25,4 +26,7 @@ if __name__=="__main__":
    s=f.readlines()
  else:
   s=sys.stdin.readlines()
+ #for l in s:
+ # l = l.strip()
+ # print(f"{pl(l)} line: {l}, replacement: {word_digits_to_digits(l)}")
  print(t.reduce(lambda a,b:a+b,[pl(l) for l in s]))
