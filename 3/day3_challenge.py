@@ -1,84 +1,78 @@
 import sys
 from os.path import exists
 from typing import Optional
+import string
 import functools
 
 default_input_filepath = "3/input.txt"
 
+def find_parts(lines: list[str]):
+    if (len(lines) != 2):
+        raise ValueError(f"lines does not have a length of 2: {len(lines)} \nlines:{lines}")
 
-def line_symbol_indices(line: str) -> list[int]:
-    line = line.strip()
-    sym_poses: list[int] = [pos for pos, c in enumerate(line) if c != "." and not c.isdigit()]
-    return sym_poses
-
-"""
-Arguments:
-    prior_line_symbol_indices: The indices of symbols in the prior line
-    prior_line_numbers: A list of tuples of:
-        A number in the prior line that was not detected to be a part,
-        The start index (inclusive) of the number,
-        The end index (exclusive) of the number
-    line: A line in the schematic
-
-Returns a tuple of:
-    A list of symbol indices
-    A list of optional tuples that contain a non-part number in the current line and the number
-        start (inclusive) and end (exclusive) indices
-    A list of part numbers (successfully identified as parts)
-"""
-def line_parts(prior_line_symbol_indices: list[int],
-               prior_line_numbers: list[Optional[tuple[int, int, int]]],
-               line: str) -> tuple[list[int],
-                                   list[Optional[tuple[int, int, int]]],
-                                   list[int]]:
     parts: list[int] = []
     number_start_idx: Optional[int] = None
-    #number_end_idx: Optional[int] = None
-    cur_number: str = ""
-    symbol_indices: list[int] = []
-    line_numbers: list[Optional[tuple[int,int,int]]] = []
+    cur_number = ""
+    cur_number_is_part = False
 
-    def reset_cur_number():
-        nonlocal number_start_idx, cur_number
+    def reset_num(add_part: bool = False):
+        nonlocal cur_number, number_start_idx, cur_number_is_part
+        if add_part and int(cur_number) not in parts:
+            parts.append(int(cur_number))
         number_start_idx = None
-        #number_end_idx = None
         cur_number = ""
+        cur_number_is_part = False
 
-    line = line.strip()
-    for pos, c in enumerate(line):
-        if c.isdigit():
-            if not number_start_idx:
-                number_start_idx = pos
-            cur_number += c
-        elif number_start_idx: # c not a digit and a number is being recognized
-            if c != ".":
-                parts.append(int(cur_number))
-            else: # c == '.'
-                # If we are at the end of the number and this isn't a symbol,
-                for prior_line_symbol_index in prior_line_symbol_indices:
-                    # -1 and +1 account for the diagonal positions.
-                    if prior_line_symbol_index >= number_start_idx-1 and prior_line_symbol_index < pos+1:
-                        parts.append(int(cur_number))
-                        reset_cur_number()
-                if symbol_indices and symbol_indices[-1] == number_start_idx-1:
-                    parts.append(int(cur_number))
-                    reset_cur_number()
-            # if a number is still in progress (has not been reset), keep it in a list of
-            # numbers in this line that have not yet been recognized as parts.
-            if number_start_idx:
-                line_numbers.append((int(cur_number), number_start_idx, pos))
-                reset_cur_number()
-        else: # c not a digit, no number in progress.
-            # determine if any prior line numbers are parts.
-            for i, prior in enumerate(prior_line_numbers):
-                if not prior:
-                    continue
-                (prior_num, prior_start, prior_end) = prior
-                for symbol_idx in symbol_indices:
-                    if symbol_idx >= prior_start-1 and symbol_idx < prior_end+1:
-                        parts.append(prior_num)
-                        prior_line_numbers[i] = None
-    return (symbol_indices, line_numbers, parts)
+    nonspecial_chars = string.digits + '.'
+
+    for i, c in enumerate(lines[1]):
+        match c:
+            case '0'|'1'|'2'|'3'|'4'|'5'|'6'|'7'|'8'|'9':
+                cur_number += c
+                if not number_start_idx:
+                    number_start_idx = i
+                    # look behind cur char to see if special char.
+                    # Mark num as part if so.
+                    if lines[1][i-1] not in (nonspecial_chars):
+                        cur_number_is_part = True
+
+            case '.':
+                if cur_number:
+                    if cur_number_is_part:
+                        reset_num(True)
+                    else:
+                        # Look in prior line to see if it is a part
+                        is_part = False
+                        for pc in lines[0][number_start_idx-1:number_start_idx+len(cur_number)+1]:
+                            if pc not in nonspecial_chars:
+                                is_part = True
+                                break
+                        reset_num(is_part)
+            case _:
+                if cur_number:
+                    reset_num(True)
+                else:
+                    if lines[1][i+1] in string.digits:
+                        # The next char coming up is a number and the current char is a special
+                        # char, so indicate that the next number will be a part.
+                        cur_number_is_part = True
+                    # Look in prior line to see if there is an adjacent number, add it as a part.
+                    for j, pc in enumerate(lines[0][i-1:i+2]):
+                        j += i-1
+                        if pc in string.digits:
+                            cur_number = pc
+                            for k in range(j-1, 0, -1):
+                                if not lines[0][k] in string.digits:
+                                    break
+                                cur_number = lines[0][k] + cur_number
+                            for k in range(j+1, len(lines[0])-1):
+                                if not lines[0][k] in string.digits:
+                                    break
+                                cur_number += lines[0][k]
+                        if cur_number:
+                            reset_num(True)
+                            break
+    return parts
 
 
 """
@@ -95,15 +89,26 @@ if __name__=="__main__":
         with open(input_filepath, 'r') as f:
             game_lines = f.readlines()
     else:
-        game_lines = sys.stdin.readlines()
+        game_lines: list[str] = sys.stdin.readlines()
 
-    parts: list[int] = []
-    cur_parts: list[int] = []
-    prior_line_symbol_indices: list[int] = []
-    prior_line_numbers: list[Optional[tuple[int,int,int]]] = []
-    for line in game_lines:
-        (prior_line_symbol_indices, prior_line_numbers, cur_parts) = line_parts(prior_line_symbol_indices, prior_line_numbers, line)
-        parts += cur_parts
+    if not game_lines:
+        print("0 parts")
+        sys.exit(1)
+
+    # To reduce corner cases, strip the line (get rid of newline), and add '.' to the front and
+    # back, so that looking for the diagonals is easier (no need to check if diagonal would be
+    # before the beginning or after the end of the prior line string)
+    game_lines = ["." + line.strip() + '.' for line in game_lines]
+
+    # To make first line processing not special cased, prepend the game_lines read in with a line
+    # that contains only `.`s (so, no numbers or special characters), then start on the second line.
+    game_lines.insert(0, "." * len(game_lines[0]))
+
+    parts_lists = [ find_parts(game_lines[i:i+2]) for i in range(0, len(game_lines)-1, 2)]
+    parts = [ part for line_parts in parts_lists for part in line_parts]
+    #parts = { part : None for line_parts in parts_lists for part in line_parts}
 
     print(f"Parts: {parts}")
-    print(f"Sum of all part numbers: {functools.reduce(lambda a,b: a+b, parts)}")
+    sum_parts = functools.reduce(lambda a,b: a+b, parts)
+    print(f"Sum of parts: {sum_parts}")
+    #print(f"Sum of all part numbers: {functools.reduce(lambda a,b: a+b, parts)}")
