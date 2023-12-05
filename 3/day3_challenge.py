@@ -108,8 +108,6 @@ if __name__=="__main__":
         if i > 0:
             print(f"Game line {i} parts: {parts_dicts[i-1]}")
 
-    print(parts_dict)
     sum_parts = functools.reduce(lambda a,b: a+b, parts)
 
-    print(f"parts_dicts[{len(parts_dicts)-1}]: {parts_dicts[len(parts_dicts)-1]}")
     print(f"Sum of parts: {sum_parts}")
