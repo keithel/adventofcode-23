@@ -6,73 +6,66 @@ import functools
 
 default_input_filepath = "3/input.txt"
 
-def find_parts(lines: list[str]):
-    if (len(lines) != 2):
-        raise ValueError(f"lines does not have a length of 2: {len(lines)} \nlines:{lines}")
-
-    parts: list[int] = []
+def find_parts(prev_line_num: int, prev_line: str, line:str) -> dict[tuple[int, int], int]:
+    line_num: int = prev_line_num+1
+    parts: dict[tuple[int, int], int] = {}
     number_start_idx: Optional[int] = None
     cur_number = ""
-    cur_number_is_part = False
 
-    def reset_num(add_part: bool = False):
-        nonlocal cur_number, number_start_idx, cur_number_is_part
-        # if add_part and int(cur_number) not in parts:
-        if add_part:
-            parts.append(int(cur_number))
+    def add_part_and_reset(line_num: int):
+        nonlocal number_start_idx, cur_number
+        parts[(line_num, number_start_idx)] = int(cur_number)
         number_start_idx = None
         cur_number = ""
-        cur_number_is_part = False
 
     nonspecial_chars = string.digits + '.'
 
-    for i, c in enumerate(lines[1]):
-        match c:
-            case '0'|'1'|'2'|'3'|'4'|'5'|'6'|'7'|'8'|'9':
-                cur_number += c
-                if not number_start_idx:
-                    number_start_idx = i
-                    # look behind cur char to see if special char.
-                    # Mark num as part if so.
-                    if lines[1][i-1] not in (nonspecial_chars):
-                        cur_number_is_part = True
-
-            case '.':
-                if cur_number:
-                    if cur_number_is_part:
-                        reset_num(True)
-                    else:
-                        # Look in prior line to see if it is a part
-                        is_part = False
-                        for pc in lines[0][number_start_idx-1:number_start_idx+len(cur_number)+1]:
-                            if pc not in nonspecial_chars:
-                                is_part = True
-                                break
-                        reset_num(is_part)
-            case _:
-                if cur_number:
-                    reset_num(True)
-                else:
-                    if lines[1][i+1] in string.digits:
-                        # The next char coming up is a number and the current char is a special
-                        # char, so indicate that the next number will be a part.
-                        cur_number_is_part = True
-                    # Look in prior line to see if there are any adjacent numbers, add them as parts.
-                    for j, pc in enumerate(lines[0][i-1:i+2]):
-                        j += i-1
-                        if pc in string.digits:
-                            cur_number = pc
-                            for k in range(j-1, -1, -1):
-                                if not lines[0][k] in string.digits:
-                                    break
-                                cur_number = lines[0][k] + cur_number
-                            for k in range(j+1, len(lines[0])):
-                                if not lines[0][k] in string.digits:
-                                    break
-                                cur_number += lines[0][k]
-                        if cur_number:
-                            reset_num(True)
+    i = 0
+    while i < len(line):
+        if line[i].isdigit():
+            number_start_idx = i
+            cur_number = line[i]
+            i += 1
+            while line[i].isdigit():
+                cur_number += line[i]
+                i += 1
+            # look behind num start char and after num end char to see if
+            # there is a special char. Add num as a part.
+            if (line[number_start_idx-1] not in nonspecial_chars
+                or line[i] not in nonspecial_chars):
+                add_part_and_reset(line_num)
+                continue
+            # Look in prior line to see if it is a part
+            for pc in prev_line[number_start_idx-1:number_start_idx+len(cur_number)+1]:
+                if pc not in nonspecial_chars:
+                    parts[(line_num, number_start_idx)] = int(cur_number)
+                    add_part_and_reset(line_num)
+                    break
+            i -= 1
+        elif line[i] != '.':
+            # Look in prior line to see if there are any adjacent numbers, add them as parts.
+            j = i-1
+            while j < i+2:
+                cur_number: str = ""
+                pc = prev_line[j]
+                if pc in string.digits:
+                    number_start_idx: int = j
+                    cur_number = pc
+                    for k in range(j-1, -1, -1):
+                        if not prev_line[k] in string.digits:
                             break
+                        number_start_idx = k
+                        cur_number = prev_line[k] + cur_number
+                    for k in range(j+1, len(prev_line)):
+                        if not prev_line[k] in string.digits:
+                            break
+                        cur_number += prev_line[k]
+                        j = k
+                if cur_number:
+                    parts[(prev_line_num, number_start_idx)] = int(cur_number)
+                    add_part_and_reset(prev_line_num)
+                j += 1
+        i += 1
     return parts
 
 
@@ -105,14 +98,18 @@ if __name__=="__main__":
     # that contains only `.`s (so, no numbers or special characters), then start on the second line.
     game_lines.insert(0, "." * len(game_lines[0]))
 
-    parts_lists = [ find_parts(game_lines[i:i+2]) for i in range(0, len(game_lines)-1)]
-    parts = [ part for line_parts in parts_lists for part in line_parts]
-    #parts = { part : None for line_parts in parts_lists for part in line_parts}
+    parts_dicts: list[dict[tuple[int, int], int]] = [ find_parts(i, game_lines[i], game_lines[i+1]) for i in range(0, len(game_lines)-1)]
+    parts_dict: dict[tuple[int, int], int] = functools.reduce(lambda a,b: a|b, parts_dicts)
+    parts = parts_dict.values()
 
     show_lines = (len(game_lines)-2, len(game_lines))
     for i in range(len(game_lines)):
         print(f"Game line {i}: {game_lines[i]}")
-        print(f"Game line {i} parts: {parts_lists[i-1]}")
+        if i > 0:
+            print(f"Game line {i} parts: {parts_dicts[i-1]}")
 
+    print(parts_dict)
     sum_parts = functools.reduce(lambda a,b: a+b, parts)
+
+    print(f"parts_dicts[{len(parts_dicts)-1}]: {parts_dicts[len(parts_dicts)-1]}")
     print(f"Sum of parts: {sum_parts}")
