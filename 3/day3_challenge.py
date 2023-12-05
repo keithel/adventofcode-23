@@ -17,7 +17,8 @@ def find_parts(lines: list[str]):
 
     def reset_num(add_part: bool = False):
         nonlocal cur_number, number_start_idx, cur_number_is_part
-        if add_part and int(cur_number) not in parts:
+        # if add_part and int(cur_number) not in parts:
+        if add_part:
             parts.append(int(cur_number))
         number_start_idx = None
         cur_number = ""
@@ -56,16 +57,16 @@ def find_parts(lines: list[str]):
                         # The next char coming up is a number and the current char is a special
                         # char, so indicate that the next number will be a part.
                         cur_number_is_part = True
-                    # Look in prior line to see if there is an adjacent number, add it as a part.
+                    # Look in prior line to see if there are any adjacent numbers, add them as parts.
                     for j, pc in enumerate(lines[0][i-1:i+2]):
                         j += i-1
                         if pc in string.digits:
                             cur_number = pc
-                            for k in range(j-1, 0, -1):
+                            for k in range(j-1, -1, -1):
                                 if not lines[0][k] in string.digits:
                                     break
                                 cur_number = lines[0][k] + cur_number
-                            for k in range(j+1, len(lines[0])-1):
+                            for k in range(j+1, len(lines[0])):
                                 if not lines[0][k] in string.digits:
                                     break
                                 cur_number += lines[0][k]
@@ -104,11 +105,14 @@ if __name__=="__main__":
     # that contains only `.`s (so, no numbers or special characters), then start on the second line.
     game_lines.insert(0, "." * len(game_lines[0]))
 
-    parts_lists = [ find_parts(game_lines[i:i+2]) for i in range(0, len(game_lines)-1, 2)]
+    parts_lists = [ find_parts(game_lines[i:i+2]) for i in range(0, len(game_lines)-1)]
     parts = [ part for line_parts in parts_lists for part in line_parts]
     #parts = { part : None for line_parts in parts_lists for part in line_parts}
 
-    print(f"Parts: {parts}")
+    show_lines = (len(game_lines)-2, len(game_lines))
+    for i in range(len(game_lines)):
+        print(f"Game line {i}: {game_lines[i]}")
+        print(f"Game line {i} parts: {parts_lists[i-1]}")
+
     sum_parts = functools.reduce(lambda a,b: a+b, parts)
     print(f"Sum of parts: {sum_parts}")
-    #print(f"Sum of all part numbers: {functools.reduce(lambda a,b: a+b, parts)}")
