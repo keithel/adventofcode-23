@@ -68,6 +68,28 @@ def find_parts(prev_line_num: int, prev_line: str, line:str) -> dict[tuple[int, 
         i += 1
     return parts
 
+def get_solutions(infile : str):
+    solutions: list[int] = []
+    solution_fnsuffix: str = ".solution"
+    solution_filepath: Optional[str] = input_filepath + solution_fnsuffix if exists(str(input_filepath) + ".solution") else None
+    if solution_filepath:
+        with open(solution_filepath, 'r') as f:
+            solution_lines: list[str] = f.readlines()
+            expected_solfile_content_msg = (
+                 "            Only 1 or 2 lines expected, with single integer solution on each line.\n"
+                 "            A '# comment' after the solution on each line is also acceptable.")
+
+            if len(solution_lines) < 1 or len(solution_lines) > 2:
+                raise ValueError(f"Solutions file {solution_filepath} does not look like a solution file.\n"
+                    f"{expected_solfile_content_msg}")
+            for lineno, solutionLine in enumerate(solution_lines):
+                tokens: list[str] = solutionLine.split(maxsplit=1)
+                if len(tokens) > 1 and tokens[1][0] != "#":
+                    raise ValueError(f"Solutions file {solution_filepath} line {lineno} has unexpected content.\n"
+                        f"{expected_solfile_content_msg}")
+                solutions.append(int(tokens[0]))
+    return solutions
+
 
 """
 Part 1:
@@ -76,14 +98,16 @@ any number adjacent to a symbol, even diagonally, is a "part number" and should
 be included in your sum. (Periods (.) do not count as a symbol.)
 """
 if __name__=="__main__":
-    game_lines = []
-    input_filepath = sys.argv[1] if len(sys.argv) > 1 else default_input_filepath if exists(default_input_filepath) else None
+    game_lines: list[str] = []
+    input_filepath: Optional[str] = sys.argv[1] if len(sys.argv) > 1 else default_input_filepath if exists(default_input_filepath) else None
 
     if input_filepath:
         with open(input_filepath, 'r') as f:
             game_lines = f.readlines()
     else:
-        game_lines: list[str] = sys.stdin.readlines()
+        game_lines = sys.stdin.readlines()
+
+    solutions: list[int] = get_solutions(input_filepath)
 
     if not game_lines:
         print("0 parts")
@@ -111,3 +135,6 @@ if __name__=="__main__":
     sum_parts = functools.reduce(lambda a,b: a+b, parts)
 
     print(f"Sum of parts: {sum_parts}")
+    if solutions and solutions[0]:
+        assert(sum_parts == solutions[0])
+        print(f"Expected solution is {solutions[0]}, solution verified.")
