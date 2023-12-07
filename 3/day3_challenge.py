@@ -1,20 +1,61 @@
 import sys
 from os.path import exists
-from typing import Optional
+from typing import Optional, Union
 import string
 import functools
 
-default_input_filepath = "3/input.txt"
+DEBUG: bool = False
+default_input_filepath: str = "3/input.txt"
 
-def find_parts(prev_line_num: int, prev_line: str, line:str) -> dict[tuple[int, int], int]:
+class Schematic_Item:
+    def __init__(self, row: int, col: int, item: Union[int, str]) -> None:
+        self.row: int = row
+        self.col: int = col
+        self.number: Optional[int] = None
+        self.symbol: Optional[str] = None
+
+        try:
+            self.number = int(item)
+        except ValueError as e:
+            if not "invalid literal" in str(e):
+                raise
+            self.symbol = item
+        self.part = False
+
+    def isnumber(self) -> bool:
+        return bool(self.number)
+
+    def issymbol(self) -> bool:
+        return bool(self.symbol)
+
+    def ispart(self) -> bool:
+        return self.part
+
+    def len(self) -> int:
+        if self.symbol:
+            return 1
+        return len(str(self.number))
+
+    def part_number(self) -> Optional[int]:
+        return self.number if self.part else None
+
+    def mark_as_part(self, value: bool = True) -> None:
+        if self.symbol:
+            raise AttributeError(f"Cannot mark a symbol as a part: ({self.row}, {self.col}) symbol {self.symbol}")
+        self.part = True
+
+
+def find_parts(prev_line_num: int, prev_line: str, line:str) -> dict[tuple[int, int], Schematic_Item]:
     line_num: int = prev_line_num+1
+
+    items: dict[tuple[int, int], Schematic_Item] = {}
     parts: dict[tuple[int, int], int] = {}
     number_start_idx: Optional[int] = None
     cur_number = ""
 
-    def add_part_and_reset(line_num: int):
-        nonlocal number_start_idx, cur_number
-        parts[(line_num, number_start_idx)] = int(cur_number)
+    def mark_part_and_reset(mp_line_num: int):
+        nonlocal items, number_start_idx, cur_number
+        items[(mp_line_num, number_start_idx)].mark_as_part()
         number_start_idx = None
         cur_number = ""
 
@@ -29,17 +70,18 @@ def find_parts(prev_line_num: int, prev_line: str, line:str) -> dict[tuple[int, 
             while line[i].isdigit():
                 cur_number += line[i]
                 i += 1
+            items[(line_num, number_start_idx)] = Schematic_Item(line_num, number_start_idx, cur_number)
             # look behind num start char and after num end char to see if
             # there is a special char. Add num as a part.
             if (line[number_start_idx-1] not in nonspecial_chars
                 or line[i] not in nonspecial_chars):
-                add_part_and_reset(line_num)
+                mark_part_and_reset(line_num)
                 continue
             # Look in prior line to see if it is a part
             for pc in prev_line[number_start_idx-1:number_start_idx+len(cur_number)+1]:
                 if pc not in nonspecial_chars:
-                    parts[(line_num, number_start_idx)] = int(cur_number)
-                    add_part_and_reset(line_num)
+                    items[(line_num, number_start_idx)] = Schematic_Item(line_num, number_start_idx, cur_number)
+                    mark_part_and_reset(line_num)
                     break
             i -= 1
         elif line[i] != '.':
@@ -62,11 +104,11 @@ def find_parts(prev_line_num: int, prev_line: str, line:str) -> dict[tuple[int, 
                         cur_number += prev_line[k]
                         j = k
                 if cur_number:
-                    parts[(prev_line_num, number_start_idx)] = int(cur_number)
-                    add_part_and_reset(prev_line_num)
+                    items[(prev_line_num, number_start_idx)] = Schematic_Item(prev_line_num, number_start_idx, cur_number)
+                    mark_part_and_reset(prev_line_num)
                 j += 1
         i += 1
-    return parts
+    return items
 
 def get_solutions(infile : str):
     solutions: list[int] = []
@@ -122,17 +164,32 @@ if __name__=="__main__":
     # that contains only `.`s (so, no numbers or special characters), then start on the second line.
     game_lines.insert(0, "." * len(game_lines[0]))
 
-    parts_dicts: list[dict[tuple[int, int], int]] = [ find_parts(i, game_lines[i], game_lines[i+1]) for i in range(0, len(game_lines)-1)]
-    parts_dict: dict[tuple[int, int], int] = functools.reduce(lambda a,b: a|b, parts_dicts)
-    parts = parts_dict.values()
+    schematicitems_dicts: list[dict[tuple[int, int], Schematic_Item]] = [ find_parts(i, game_lines[i], game_lines[i+1]) for i in range(0, len(game_lines)-1)]
+    schematicitems_dict: dict[tuple[int, int], int] = functools.reduce(lambda a,b: a|b, schematicitems_dicts)
+    schematicitems: list[Schematic_Item] = schematicitems_dict.values()
 
-    show_lines = (len(game_lines)-2, len(game_lines))
-    for i in range(len(game_lines)):
-        print(f"Game line {i}: {game_lines[i]}")
-        if i > 0:
-            print(f"Game line {i} parts: {parts_dicts[i-1]}")
+    if DEBUG:
+        for i in range(len(game_lines)):
+            print(f"Game line {str(i).zfill(3)}: {game_lines[i]}")
+            if i > 0:
+                line_item_dict = schematicitems_dicts[i-1]
+                print(f"Game line {i} parts: {[item.part_number() for item in line_item_dict.values() if item.ispart()]}")
 
-    sum_parts = functools.reduce(lambda a,b: a+b, parts)
+    def add_list_SchematicItem_by_part_number(a: Union[Schematic_Item, int],
+                                              b: Union[Schematic_Item, int]):
+        partnums: list[int] = []
+        for n in [a, b]:
+            part_number = 0
+            if type(n) == Schematic_Item:
+                part_number = n.number if n.ispart() else 0
+            else:
+                part_number = n
+            partnums.append(part_number)
+        return functools.reduce(lambda a,b:a+b, partnums)
+
+    if DEBUG:
+        print(f"schematicitems parts: {[schematicitem.part_number() for schematicitem in schematicitems if schematicitem.ispart()]}")
+    sum_parts = functools.reduce(add_list_SchematicItem_by_part_number, schematicitems)
 
     print(f"Sum of parts: {sum_parts}")
     if solutions and solutions[0]:
