@@ -1,3 +1,4 @@
+from __future__ import annotations
 import sys
 from os.path import exists
 from typing import Optional, Union
@@ -9,40 +10,81 @@ default_input_filepath: str = "3/input.txt"
 
 class Schematic_Item:
     def __init__(self, row: int, col: int, item: Union[int, str]) -> None:
-        self.row: int = row
-        self.col: int = col
-        self.number: Optional[int] = None
-        self.symbol: Optional[str] = None
+        self._row: int = row
+        self._col: int = col
+        self._number: Optional[int] = None
+        self._symbol: Optional[str] = None
 
         try:
-            self.number = int(item)
+            self._number = int(item)
         except ValueError as e:
             if not "invalid literal" in str(e):
                 raise
-            self.symbol = item
-        self.part = False
+            self._symbol = item
+        self._part = False
+
+    def row(self) -> int:
+        return self._row
+
+    def col(self) -> int:
+        return self._col
+
+    def number(self) -> Optional[int]:
+        return self._number
+
+    def symbol(self) -> Optional[str]:
+        return self._symbol
 
     def isnumber(self) -> bool:
-        return bool(self.number)
+        return bool(self._number)
 
     def issymbol(self) -> bool:
-        return bool(self.symbol)
+        return bool(self._symbol)
 
     def ispart(self) -> bool:
-        return self.part
+        return self._part
 
     def len(self) -> int:
-        if self.symbol:
+        if self._symbol:
             return 1
-        return len(str(self.number))
+        return len(str(self._number))
+
+    def __str__(self) -> str:
+        return f"SchematicItem: ({self._row},{self._col}) {'' if self.issymbol() else 'part' if self.ispart() else 'number'} {self._number if self.isnumber() else self._symbol}"
+
+    def __repr__(self) -> str:
+        return self.__str__()
 
     def part_number(self) -> Optional[int]:
-        return self.number if self.part else None
+        return self._number if self._part else None
+
+    def gear_ratio(self, prev_to_next_line_item_dicts: list[dict[tuple[int, int], Schematic_Item]]) -> int:
+        num_items: list[int] = []
+        for r in range(3):
+            for c in range(self._col + 2):
+                try:
+                    item = prev_to_next_line_item_dicts[r][(self._row-1+r,c)]
+                    if not item.isnumber():
+                        continue
+                    for d in range(self._row-1, self._row+2):
+                        if d >= item.col() and d < item.col() + item.len():
+                            num_items.append(item.number())
+                except KeyError:
+                    # We will get this if the row+column entry in the dict doesn't exist
+                    # in that case we just want to continue on to the next.
+                    pass
+                except IndexError:
+                    # We will get this when subscripting prev_.. with r==3 at the end of the file/data.
+                    # It's ok to just skip this.
+                    pass
+
+        # Return 0 if there aren't exactly 2 adjacent numbers, otherwise return the two multiplied together.
+        return num_items[0] * num_items[1] if len(num_items) == 2 else 0
 
     def mark_as_part(self, value: bool = True) -> None:
-        if self.symbol:
-            raise AttributeError(f"Cannot mark a symbol as a part: ({self.row}, {self.col}) symbol {self.symbol}")
-        self.part = True
+        if self._symbol:
+            raise AttributeError(f"Cannot mark a symbol as a part: ({self._row}, {self._col}) symbol {self._symbol}")
+        self._part = True
 
 
 def find_parts(prev_line_num: int, prev_line: str, line:str) -> dict[tuple[int, int], Schematic_Item]:
@@ -85,6 +127,7 @@ def find_parts(prev_line_num: int, prev_line: str, line:str) -> dict[tuple[int, 
                     break
             i -= 1
         elif line[i] != '.':
+            items[(line_num, i)] = Schematic_Item(line_num, i, line[i])
             # Look in prior line to see if there are any adjacent numbers, add them as parts.
             j = i-1
             while j < i+2:
@@ -132,6 +175,29 @@ def get_solutions(infile : str):
                 solutions.append(int(tokens[0]))
     return solutions
 
+def find_stars(line_item_dicts: list[dict[tuple[int, int], Schematic_Item]]) -> list[Schematic_Item]:
+    #star_items: list[Schematic_Item] = []
+    #for l, item_dict in enumerate(line_item_dicts):
+    #    print(f"line {l} stars: {[item for item in item_dict.values() if item.symbol() == '*']}")
+    star_items: list[Schematic_Item] = [item for item_dict in line_item_dicts for item in item_dict.values() if item.symbol() == "*"]
+    return star_items
+
+def sum_gear_ratios(line_item_dicts: list[dict[tuple[int, int], Schematic_Item]]): # -> int:
+    def sum_gears(a: Union[Schematic_Item, int], b: Union[Schematic_Item, int]) -> int:
+        gear_ratios: list[int] = []
+        for n in [a, b]:
+            gear_ratio = 0
+            if type(n) == Schematic_Item:
+                gear_ratio = n.gear_ratio(line_item_dicts[n.row()-1:n.row()+2])
+            else:
+                gear_ratio = n
+            gear_ratios.append(gear_ratio)
+        return functools.reduce(lambda a,b:a+b, gear_ratios)
+
+    stars: list[Schematic_Item] = find_stars(line_item_dicts)
+    print(f"stars: {stars}")
+    gear_sum = [functools.reduce(sum_gears, stars)]
+    return gear_sum
 
 """
 Part 1:
@@ -181,7 +247,7 @@ if __name__=="__main__":
         for n in [a, b]:
             part_number = 0
             if type(n) == Schematic_Item:
-                part_number = n.number if n.ispart() else 0
+                part_number = n.number() if n.ispart() else 0
             else:
                 part_number = n
             partnums.append(part_number)
@@ -195,3 +261,7 @@ if __name__=="__main__":
     if solutions and solutions[0]:
         assert(sum_parts == solutions[0])
         print(f"Expected solution is {solutions[0]}, solution verified.")
+
+    print(f"Part 2, sum of gear ratios")
+    print(f"Sum of all gear ratios: {sum_gear_ratios(schematicitems_dicts)}")
+    # Not the answer: 5386663
